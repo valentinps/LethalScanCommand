@@ -39,6 +39,10 @@ public class LethalScanCommand : BaseUnityPlugin
     public static bool CompactResponse =>
         Instance == null || Instance.compactResponse is { Value: true } or null;
 
+    private ConfigEntry<bool>? autoAnnounceOutside;
+    public static bool AutoAnnounceOutside =>
+        Instance != null && Instance.autoAnnounceOutside is { Value: true };
+
     private void Awake()
     {
         Logger = base.Logger;
@@ -74,6 +78,12 @@ public class LethalScanCommand : BaseUnityPlugin
             true,
             "Whether to reply with a short summary or a complete sentence"
         );
+        autoAnnounceOutside = Config.Bind(
+            "General",
+            "AutoAnnounceOutside",
+            false,
+            "Automatically announces the amount of items and beehives outside when a round starts"
+        );
 
         _ = new ScanCommand();
 
@@ -83,5 +93,51 @@ public class LethalScanCommand : BaseUnityPlugin
         Logger.LogDebug("Finished patching!");
 
         Logger.LogInfo($"{MyPluginInfo.PLUGIN_GUID} v{MyPluginInfo.PLUGIN_VERSION} has loaded!");
+    }
+
+    [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.openingDoorsSequence))]
+    internal class AutoAnnouncePatch
+    {
+        // ReSharper disable once UnusedMember.Local
+        private static void Postfix(ref StartOfRound __instance)
+        {
+            Logger.LogDebug(
+                $">> AutoAnnouncePatch({__instance}) IsServer:{__instance.IsServer} AutoAnnounceOutside:{AutoAnnounceOutside}"
+            );
+            if (!__instance.IsServer || !AutoAnnounceOutside)
+                return;
+            if (
+                ScanCommand.Countitems(
+                    out var error,
+                    out _,
+                    out _,
+                    out _,
+                    out _,
+                    out _,
+                    out _,
+                    out _,
+                    out _,
+                    out _,
+                    out var outsideShip,
+                    out var outsideShipBees,
+                    out _,
+                    out _
+                )
+            )
+            {
+                Logger.LogInfo($"{outsideShip} {outsideShipBees}");
+                if (outsideShip > 0 || outsideShipBees > 0)
+                    HUDManager.Instance.AddTextMessageServerRpc(
+                        $"<color=#00ff00>{outsideShip} {outsideShipBees}</color>"
+                    );
+            }
+            else
+            {
+                Logger.LogError($"Error while counting items: {error}");
+                HUDManager.Instance.AddTextMessageServerRpc(
+                    $"<color=#ff0000>Error while counting items: {error}</color>"
+                );
+            }
+        }
     }
 }
