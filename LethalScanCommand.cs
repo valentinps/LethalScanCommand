@@ -13,9 +13,27 @@ public class LethalScanCommand : BaseUnityPlugin
     internal static new ManualLogSource Logger { get; private set; } = null!;
     internal static Harmony? Harmony { get; set; }
 
-    private ConfigEntry<bool>? approximateValue;
-    public static bool ApproximateValue =>
-        Instance == null || Instance.approximateValue is { Value: true } or null;
+    public enum ApproximateValueOnCruiserOptions
+    {
+        Never,
+        UnMagneted,
+        Always,
+    }
+
+    private ConfigEntry<bool>? approximateValueInShip;
+    public static bool ApproximateValueInShip =>
+        Instance != null && Instance.approximateValueInShip is { Value: true };
+    private ConfigEntry<bool>? approximateValueOnShip;
+    public static bool ApproximateValueOnShip =>
+        Instance != null && Instance.approximateValueOnShip is { Value: true };
+    private ConfigEntry<ApproximateValueOnCruiserOptions>? approximateValueOnCruiser;
+    public static ApproximateValueOnCruiserOptions ApproximateValueOnCruiser =>
+        Instance == null || Instance.approximateValueOnCruiser is null
+            ? ApproximateValueOnCruiserOptions.UnMagneted
+            : Instance.approximateValueOnCruiser.Value;
+    private ConfigEntry<bool>? approximateValueOutsideShip;
+    public static bool ApproximateValueOutsideShip =>
+        Instance == null || Instance.approximateValueOutsideShip is { Value: true } or null;
 
     private ConfigEntry<bool>? compactResponse;
     public static bool CompactResponse =>
@@ -26,11 +44,29 @@ public class LethalScanCommand : BaseUnityPlugin
         Logger = base.Logger;
         Instance = this;
 
-        approximateValue = Config.Bind(
+        approximateValueInShip = Config.Bind(
             "General",
-            "ApproximateValue",
+            "ApproximateValueInShip",
+            false,
+            "Whether to approximate the value of the items inside the ship"
+        );
+        approximateValueOnShip = Config.Bind(
+            "General",
+            "ApproximateValueOnShip",
+            false,
+            "Whether to approximate the value of the items on the ship (not collected)"
+        );
+        approximateValueOnCruiser = Config.Bind(
+            "General",
+            "ApproximateValueOnCruiser",
+            ApproximateValueOnCruiserOptions.UnMagneted,
+            "When to approximate the value of the items on the company cruiser"
+        );
+        approximateValueOutsideShip = Config.Bind(
+            "General",
+            "ApproximateValueOutsideShip",
             true,
-            "Whether to display an approximation of the value or the exact amount"
+            "Whether to approximate the value of the items outside the ship (not collected)"
         );
         compactResponse = Config.Bind(
             "General",
