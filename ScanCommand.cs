@@ -47,7 +47,8 @@ public class ScanCommand : ServerCommand
                 out var onCruiserValue,
                 out var outsideShip,
                 out var outsideShipBees,
-                out var outsideShipValue,
+                out var outsideShipValueNoBees,
+                out var outsideShipValueBees,
                 out var carValueApproximated
             )
         )
@@ -72,7 +73,7 @@ public class ScanCommand : ServerCommand
                 );
             if (!StartOfRound.Instance.inShipPhase)
                 lines.Add(
-                    $"Outside ship: {outsideShip}/{outsideShipBees} items{(outsideShip > 0 || outsideShipBees > 0 ? $" worth {c(LethalScanCommand.ApproximateValueOutsideShip, outsideShipValue)}" : string.Empty)}"
+                    $"Outside ship: {outsideShip}/{outsideShipBees} items{(outsideShip > 0 || outsideShipBees > 0 ? $" worth {c(LethalScanCommand.ApproximateValueOutsideShip, outsideShipValueNoBees)}" : string.Empty)}"
                 );
             LethalScanCommand.Logger.LogDebug($"   lines:{d(lines)}");
             text = lines.Count == 0 ? "No items" : lines.Join(null, "\n");
@@ -96,7 +97,7 @@ public class ScanCommand : ServerCommand
                 );
             if (!StartOfRound.Instance.inShipPhase)
                 strings.Add(
-                    $"{a(outsideShip, outsideShipBees, ref first, strings.Count == 0)}{(outsideShip > 0 ? $" worth {c(LethalScanCommand.ApproximateValueOutsideShip, outsideShipValue)}" : string.Empty)} outside the ship"
+                    $"{a(outsideShip, outsideShipBees, ref first, strings.Count == 0)}{(outsideShip > 0 ? $" worth {c(LethalScanCommand.ApproximateValueOutsideShip, outsideShipValueNoBees)}" : string.Empty)} outside the ship"
                 );
 
             LethalScanCommand.Logger.LogDebug($"   strings:{d(strings)}");
@@ -142,7 +143,8 @@ public class ScanCommand : ServerCommand
         out int onCruiserValue,
         out int outsideShip,
         out int outsideShipBees,
-        out int outsideShipValue,
+        out int outsideShipValueNoBees,
+        out int outsideShipValueBees,
         out bool carValueApproximated
     )
     {
@@ -157,7 +159,8 @@ public class ScanCommand : ServerCommand
         onCruiserValue = 0;
         outsideShip = 0;
         outsideShipBees = 0;
-        outsideShipValue = 0;
+        outsideShipValueNoBees = 0;
+        outsideShipValueBees = 0;
         carValueApproximated = false;
 
         error = "items is null";
@@ -212,11 +215,15 @@ public class ScanCommand : ServerCommand
             }
             else
             {
-                if (IsBees(item))
+                if (IsBees(item)) {
                     outsideShipBees++;
+                    outsideShipValueBees += a(LethalScanCommand.ApproximateValueOutsideShip, item, i);
+                }
                 else
+                {
                     outsideShip++;
-                outsideShipValue += a(LethalScanCommand.ApproximateValueOutsideShip, item, i);
+                    outsideShipValueNoBees += a(LethalScanCommand.ApproximateValueOutsideShip, item, i);
+                }
             }
         }
 
@@ -242,6 +249,6 @@ public class ScanCommand : ServerCommand
     private static bool IsBees(GrabbableObject item)
     {
         LethalScanCommand.Logger.LogDebug($">> IsBees({item}) name:{item.name}");
-        return item.name == "RedLocustHive(Clone)";
+        return item.name == "RedLocustHive(Clone)" || item.name == "KiwiBabyItem(Clone)";
     }
 }

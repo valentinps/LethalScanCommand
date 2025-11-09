@@ -43,6 +43,9 @@ public class LethalScanCommand : BaseUnityPlugin
     public static bool AutoAnnounceOutside =>
         Instance != null && Instance.autoAnnounceOutside is { Value: true };
 
+    private ConfigEntry<float>? scanDelay;
+    public static float ScanDelay =>
+        Instance != null && Instance.scanDelay is { Value: var v } ? v : 2f;
     private void Awake()
     {
         Logger = base.Logger;
@@ -84,6 +87,12 @@ public class LethalScanCommand : BaseUnityPlugin
             false,
             "Automatically announces the amount of items and beehives outside when a round starts"
         );
+        scanDelay = Config.Bind(
+            "General",
+            "ScanDelay",
+            2f,
+            "Delay in seconds before performing the scan (to allow items to settle)"
+        );
 
         _ = new ScanCommand();
 
@@ -104,39 +113,49 @@ public class LethalScanCommand : BaseUnityPlugin
             Logger.LogDebug(
                 $">> AutoAnnouncePatch({__instance}) IsServer:{__instance.IsServer} AutoAnnounceOutside:{AutoAnnounceOutside}"
             );
-            if (!__instance.IsServer || !AutoAnnounceOutside)
+            if (!AutoAnnounceOutside)
                 return;
-            if (
-                ScanCommand.Countitems(
-                    out var error,
-                    out _,
-                    out _,
-                    out _,
-                    out _,
-                    out _,
-                    out _,
-                    out _,
-                    out _,
-                    out _,
-                    out var outsideShip,
-                    out var outsideShipBees,
-                    out _,
-                    out _
+            Instance.StartCoroutine(DelayedAutoAnnounce(__instance));
+            return;
+
+            static System.Collections.IEnumerator DelayedAutoAnnounce(StartOfRound instance)
+            {
+                yield return new UnityEngine.WaitForSeconds(ScanDelay);
+
+                Logger.LogDebug($">> AutoAnnouncePatch delayed for {ScanDelay}s");
+                if (
+                    ScanCommand.Countitems(
+                        out var error,
+                        out _,
+                        out _,
+                        out _,
+                        out _,
+                        out _,
+                        out _,
+                        out _,
+                        out _,
+                        out _,
+                        out var outsideShip,
+                        out var outsideShipBees,
+                        out var outsideShipValueNoBees,
+                        out var outsideShipValueBees,
+                        out _
+                    )
                 )
-            )
-            {
-                Logger.LogInfo($"{outsideShip} {outsideShipBees}");
-                if (outsideShip > 0 || outsideShipBees > 0)
+                {
+                    Logger.LogInfo($"{outsideShip} {outsideShipBees} {outsideShipValueNoBees} {outsideShipValueBees}");
+                    if (outsideShip > 0 || outsideShipBees > 0)
+                        HUDManager.Instance.AddTextMessageServerRpc(
+                            $"<color=#00ff00>Scan: {outsideShip} {outsideShipBees} {outsideShipValueNoBees} {outsideShipValueBees}</color>"
+                        );
+                }
+                else
+                {
+                    Logger.LogError($"Error while counting items: {error}");
                     HUDManager.Instance.AddTextMessageServerRpc(
-                        $"<color=#00ff00>{outsideShip} {outsideShipBees}</color>"
+                        $"<color=#ff0000>Error while counting items: {error}</color>"
                     );
-            }
-            else
-            {
-                Logger.LogError($"Error while counting items: {error}");
-                HUDManager.Instance.AddTextMessageServerRpc(
-                    $"<color=#ff0000>Error while counting items: {error}</color>"
-                );
+                }
             }
         }
     }
