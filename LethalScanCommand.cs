@@ -1,100 +1,62 @@
+using System.Collections.Generic;
+using System.Linq;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
+using GameNetcodeStuff;
 using HarmonyLib;
+using Microsoft.VisualBasic;
+using UnityEngine;
 
-namespace LethalScanCommand;
+namespace AutoScan;
 
 [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
-[BepInDependency("baer1.ChatCommandAPI")]
-public class LethalScanCommand : BaseUnityPlugin
+public class AutoScan : BaseUnityPlugin
 {
-    public static LethalScanCommand Instance { get; private set; } = null!;
+    public static AutoScan Instance { get; private set; } = null!;
     internal static new ManualLogSource Logger { get; private set; } = null!;
     internal static Harmony? Harmony { get; set; }
+    private ConfigEntry<bool>? autoAnnounce;
+    public static bool AutoAnnounce => Instance != null && Instance.autoAnnounce is { Value: true };
 
-    public enum ApproximateValueOnCruiserOptions
-    {
-        Never,
-        UnMagneted,
-        Always,
-    }
+    private ConfigEntry<bool>? announceOutsideLoot;
+    public static bool AnnounceOutsideLoot =>
+        Instance != null && Instance.announceOutsideLoot is { Value: true };
 
-    private ConfigEntry<bool>? approximateValueInShip;
-    public static bool ApproximateValueInShip =>
-        Instance != null && Instance.approximateValueInShip is { Value: true };
-    private ConfigEntry<bool>? approximateValueOnShip;
-    public static bool ApproximateValueOnShip =>
-        Instance != null && Instance.approximateValueOnShip is { Value: true };
-    private ConfigEntry<ApproximateValueOnCruiserOptions>? approximateValueOnCruiser;
-    public static ApproximateValueOnCruiserOptions ApproximateValueOnCruiser =>
-        Instance == null || Instance.approximateValueOnCruiser is null
-            ? ApproximateValueOnCruiserOptions.UnMagneted
-            : Instance.approximateValueOnCruiser.Value;
-    private ConfigEntry<bool>? approximateValueOutsideShip;
-    public static bool ApproximateValueOutsideShip =>
-        Instance == null || Instance.approximateValueOutsideShip is { Value: true } or null;
+    private ConfigEntry<bool>? announceValue;
+    public static bool AnnounceValue =>
+        Instance != null && Instance.announceValue is { Value: true };
 
-    private ConfigEntry<bool>? compactResponse;
-    public static bool CompactResponse =>
-        Instance == null || Instance.compactResponse is { Value: true } or null;
-
-    private ConfigEntry<bool>? autoAnnounceOutside;
-    public static bool AutoAnnounceOutside =>
-        Instance != null && Instance.autoAnnounceOutside is { Value: true };
-
-    private ConfigEntry<float>? scanDelay;
-    public static float ScanDelay =>
-        Instance != null && Instance.scanDelay is { Value: var v } ? v : 2f;
+    private ConfigEntry<bool>? hostOnly;
+    public static bool HostOnly => Instance != null && Instance.hostOnly is { Value: true };
     private void Awake()
     {
         Logger = base.Logger;
         Instance = this;
-
-        approximateValueInShip = Config.Bind(
+        autoAnnounce = Config.Bind(
             "General",
-            "ApproximateValueInShip",
-            false,
-            "Whether to approximate the value of the items inside the ship"
-        );
-        approximateValueOnShip = Config.Bind(
-            "General",
-            "ApproximateValueOnShip",
-            false,
-            "Whether to approximate the value of the items on the ship (not collected)"
-        );
-        approximateValueOnCruiser = Config.Bind(
-            "General",
-            "ApproximateValueOnCruiser",
-            ApproximateValueOnCruiserOptions.UnMagneted,
-            "When to approximate the value of the items on the company cruiser"
-        );
-        approximateValueOutsideShip = Config.Bind(
-            "General",
-            "ApproximateValueOutsideShip",
+            "AutoAnnounce",
             true,
-            "Whether to approximate the value of the items outside the ship (not collected)"
+            "Automatically announce the number of items outside the ship at the start of the round"
         );
-        compactResponse = Config.Bind(
+        announceOutsideLoot = Config.Bind(
             "General",
-            "CompactResponse",
+            "AnnounceOutsideLoot",
             true,
-            "Whether to reply with a short summary or a complete sentence"
+            "Announce the amount of loot outside the facility including Beehives and Sapsucker eggs"
         );
-        autoAnnounceOutside = Config.Bind(
+        announceValue = Config.Bind(
             "General",
-            "AutoAnnounceOutside",
-            false,
-            "Automatically announces the amount of items and beehives outside when a round starts"
+            "AnnounceValue",
+            true,
+            "Announce the total loot value when scanning"
         );
-        scanDelay = Config.Bind(
+        hostOnly = Config.Bind(
             "General",
-            "ScanDelay",
-            2f,
-            "Delay in seconds before performing the scan (to allow items to settle)"
+            "HostOnly",
+            true,
+            "Only announce if you are the host"
         );
-
-        _ = new ScanCommand();
 
         Harmony ??= new Harmony(MyPluginInfo.PLUGIN_GUID);
         Logger.LogDebug("Patching...");
@@ -102,52 +64,137 @@ public class LethalScanCommand : BaseUnityPlugin
         Logger.LogDebug("Finished patching!");
 
         Logger.LogInfo($"{MyPluginInfo.PLUGIN_GUID} v{MyPluginInfo.PLUGIN_VERSION} has loaded!");
+
+    }
+    public static void ReloadConfig()
+    {
+        if (BepInEx.Bootstrap.Chainloader.ManagerObject == null)
+            return;
+
+        var pluginInstance = BepInEx.Bootstrap.Chainloader.ManagerObject.GetComponent<AutoScan>();
+        if (pluginInstance == null)
+            return;
+
+        pluginInstance.Config.Reload();
     }
 
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.openingDoorsSequence))]
     internal class AutoAnnouncePatch
     {
+        public static bool Countitems(
+            out string? error,
+            out int outsideShip,
+            out int outsideShipBees,
+            out int outsideShipValueNoBees,
+            out int outsideShipValueBees
+        )
+        {
+            outsideShip = 0;
+            outsideShipBees = 0;
+            outsideShipValueNoBees = 0;
+            outsideShipValueBees = 0;
+
+            error = "items is null";
+            var items = Object.FindObjectsOfType<GrabbableObject>();
+            if (items == null)
+                return false;
+
+            error = "ship is null";
+            var ship = GameObject.Find("Environment/HangarShip");
+            if (ship == null)
+                return false;
+
+            error = "vehicles is null";
+            var vehicles = Object.FindObjectsOfType<VehicleController>();
+            if (vehicles == null)
+                return false;
+
+            var random = new System.Random(StartOfRound.Instance.randomMapSeed + 91);
+            for (var i = 0; i < items.Length; i++)
+            {
+                var item = items[i];
+                if (
+                    !item.itemProperties.isScrap
+                    || item.isInShipRoom
+                    || item.transform.IsChildOf(ship.transform)
+                    || vehicles.Any(_car => item.transform.IsChildOf(_car.transform))
+                )
+                    continue;
+                else
+                {
+                    if (IsBees(item))
+                    {
+                        outsideShipBees++;
+                        outsideShipValueBees += a(true, item, i);
+                    }
+                    else
+                    {
+                        outsideShip++;
+                        outsideShipValueNoBees += a(true, item, i);
+                    }
+                }
+            }
+
+            return true;
+
+            int a(bool randomize, GrabbableObject item, int i) =>
+                randomize
+                    ? Mathf.Clamp(
+                        random.Next(item.itemProperties.minValue, item.itemProperties.maxValue),
+                        item.scrapValue - 6 * i,
+                        item.scrapValue + 9 * i
+                    )
+                    : item.scrapValue;
+        }
+
+        private static bool IsBees(GrabbableObject item)
+        {
+            AutoScan.Logger.LogDebug($">> IsBees({item}) name:{item.name}");
+            return item.name == "RedLocustHive(Clone)" || item.name == "KiwiBabyItem(Clone)";
+        }
+
         // ReSharper disable once UnusedMember.Local
         private static void Postfix(ref StartOfRound __instance)
         {
+            ReloadConfig();
             Logger.LogDebug(
-                $">> AutoAnnouncePatch({__instance}) IsServer:{__instance.IsServer} AutoAnnounceOutside:{AutoAnnounceOutside}"
+                $">> AutoAnnouncePatch({__instance}) IsServer:{__instance.IsServer} AutoAnnounce:{AutoAnnounce}"
             );
-            if (!AutoAnnounceOutside)
+            if (!AutoAnnounce || (!__instance.IsServer && HostOnly))
                 return;
             Instance.StartCoroutine(DelayedAutoAnnounce(__instance));
             return;
 
             static System.Collections.IEnumerator DelayedAutoAnnounce(StartOfRound instance)
             {
-                yield return new UnityEngine.WaitForSeconds(ScanDelay);
+                yield return new UnityEngine.WaitForSeconds(2f);
 
-                Logger.LogDebug($">> AutoAnnouncePatch delayed for {ScanDelay}s");
+                Logger.LogDebug($">> AutoAnnouncePatch delayed for {2f}s");
                 if (
-                    ScanCommand.Countitems(
+                    Countitems(
                         out var error,
-                        out _,
-                        out _,
-                        out _,
-                        out _,
-                        out _,
-                        out _,
-                        out _,
-                        out _,
-                        out _,
                         out var outsideShip,
                         out var outsideShipBees,
                         out var outsideShipValueNoBees,
-                        out var outsideShipValueBees,
-                        out _
+                        out var outsideShipValueBees
                     )
                 )
                 {
-                    Logger.LogInfo($"{outsideShip} {outsideShipBees} {outsideShipValueNoBees} {outsideShipValueBees}");
+                    Logger.LogInfo(
+                        $"{outsideShip} {outsideShipBees} {outsideShipValueNoBees} {outsideShipValueBees}"
+                    );
                     if (outsideShip > 0 || outsideShipBees > 0)
-                        HUDManager.Instance.AddTextMessageServerRpc(
-                            $"<color=#00ff00>Scan: {outsideShip} {outsideShipBees} {outsideShipValueNoBees} {outsideShipValueBees}</color>"
-                        );
+                    {
+                        var msg = $"<color=#00ff00>Scan: {outsideShip}";
+                        if (AnnounceOutsideLoot)
+                            msg += $"/{outsideShipBees}";
+                        if (AnnounceValue)
+                            msg += $" {outsideShipValueNoBees}";
+                        if (AnnounceOutsideLoot && AnnounceValue)
+                            msg += $"/{outsideShipValueBees}";
+                        msg += "</color>";
+                        HUDManager.Instance.AddTextMessageServerRpc(msg);
+                    }
                 }
                 else
                 {

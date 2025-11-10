@@ -1,7 +1,8 @@
 {
-  "name": "LethalScanCommand",
-  "version_number": "1.0.0",
-  "website_url": "https://github.com/baerchen201/LethalScanCommand",
-  "description": "Adds a server-wide !scan command that displays the amount of scrap left on the planet (ShipLoot but for the entire server)",
-  "dependencies": ["BepInEx-BepInExPack-5.4.2100", "baer1-ChatCommandAPI-0.2.2"]
+  "name": "AutoScan",
+  "author": "abu",
+  "version_number": "1.1.1",
+  "website_url": "",
+  "description": "Shows terminal scan results in chat when landing on a moon.",
+  "dependencies": ["BepInEx-BepInExPack-5.4.2100"]
 }

@@ -1,38 +1,23 @@
-## Installation
-
-### This mod only functions if the server host has it installed (it's Server-Side and Vanilla-compatible)
-
-Only the server host needs this mod.
-
-You can install this mod and host a lobby, and it will work just fine **for everyone**.
-
-However, if you join a lobby where the host does not have this mod, it will not work.
-
-## Usage
-
-Simply type `!scan` into the chat. You will get a reply telling you the amount of items and their values.
+Automatically scans the items upon landing and sends output in chat for everyone
 
 ## Configuration
 
-### Value approximation
+1) AutoAnnounce (default: true)
+    - Purpose: Automatically announces the number of items located outside the ship at the start of the round.
+    - Behavior: When enabled, the mod performs a single automatic announcement at round start summarizing how many loot items are outside the ship.
+    - When to disable: Turn off if you prefer manually scanning for items.
 
-You can configure the command to only show an approximation of the total value.
+2) AnnounceOutsideLoot (default: true)
+    - Purpose: Includes the total count of loot that is located outside the facility in announcements. This count includes Beehives and Sapsucker eggs.
+    - Behavior: When enabled, any announcement about outside items will explicitly include discovered outside loot counts, and will account for Beehives and Sapsucker eggs in that total.
+    - When to disable: Disable if you do not want these external loot counts revealed.
 
-This is similar to the `scan` terminal command in vanilla.
+3) AnnounceValue (default: true)
+    - Purpose: Announces the total loot value (approximate, identical to terminal scan command) when performing a scan/announcement.
+    - Behavior: When enabled, announcements will include the aggregated value of the scanned loot in addition to counts.
+    - When to disable: Disable if you want announcements to show only counts (not values), or to reduce information revealed to other players.
 
-### Compact response
-
-This is for all the "complete sentence" people out there.
-
-When you turn this off, the reply will be formatted as a complete, grammatically correct sentence.
-
-It also makes it way harder to interpret the reply, so just keep it off.
-
-### Auto-Announce loot
-
-So you know how some players like to stay on the terminal during the landing, and then type two numbers in the chat?
-
-This mod can do that automatically.
-
-Also, for anyone wondering:
-The first number is the amount of loot on the planet, and the second number is the amount of beehives.
+4) HostOnly (default: true)
+    - Purpose: Restricts automated announcements to the host only.
+    - Behavior: When enabled, the mod will not announce scan on lobbies you do not host.
+    - When to disable: Disable to do the announcement as a client.
